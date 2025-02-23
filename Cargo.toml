@@ -1,0 +1,10 @@
+[package]
+name = "rtc_quebec_gtfs_rt"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+gtfs-realtime = "0.1.3"
+gtfs-structures = "0.43.0"
+reqwest = "0.12.12"
+tokio = { version = "1.43.0", features = ["full"] }
