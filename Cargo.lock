@@ -1542,7 +1542,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rtc_quebec_gtfs_rt"
+name = "rtc-quebec-gtfs-rt"
 version = "0.1.0"
 dependencies = [
  "chrono",
