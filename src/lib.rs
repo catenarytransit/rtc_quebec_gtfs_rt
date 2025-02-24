@@ -128,7 +128,25 @@ pub async fn faire_les_donnees_gtfs_rt(
 
     println!("route_id_to_trips: {:?}", end_timer);
 
-    let parcours = obtenir_la_liste_des_itinéraires(client.clone()).await?;
+    let mut parcours: Option<_> = None;
+    let mut tries = 0;
+
+    while tries < 10 {
+        let parcours_t = obtenir_la_liste_des_itinéraires(client.clone()).await;
+
+        let is_success = parcours_t.is_ok();
+
+        parcours = Some(parcours_t);
+
+        if is_success {
+            break;
+        }
+
+        tries += 1;
+    }
+
+    let parcours = parcours.unwrap();
+    let parcours = parcours?;
 
     let mut pos_requests = vec![];
 
@@ -186,11 +204,30 @@ pub async fn faire_les_donnees_gtfs_rt(
         let id_autobus = id_autobus.clone();
 
         horaires_requests.push(async move {
-            let horaires_req =
-                obtenir_liste_horaire_de_autobus(id_voyage.as_str(), id_autobus, client).await;
+            let mut horaires_req = None;
+            let mut tries = 0;
+
+            while tries < 5 {
+                horaires_req = Some(
+                    obtenir_liste_horaire_de_autobus(
+                        id_voyage.as_str(),
+                        id_autobus,
+                        client.clone(),
+                    )
+                    .await,
+                );
+
+                if horaires_req.as_ref().unwrap().is_ok() {
+                    break;
+                }
+
+                tries += 1;
+            }
+
+            let horaires_req = horaires_req.unwrap();
 
             match horaires_req {
-                Ok(horaires) => Ok((id_voyage, id_autobus, horaires)),
+                Ok(horaires) => Ok((id_voyage.clone(), id_autobus, horaires)),
                 Err(e) => Err(e),
             }
         });
@@ -396,6 +433,11 @@ pub async fn faire_les_donnees_gtfs_rt(
                             });
                         }
                     }
+                } else {
+                    println!(
+                        "No stop times in rtc quebec! parcours: {} voyage: {}, no autobus {}",
+                        parcours_id, id_voyage, id_autobus
+                    );
                 }
 
                 // make vehicle position
