@@ -377,9 +377,16 @@ pub async fn faire_les_donnees_gtfs_rt(
                                     let trip = gtfs.trips.get(*trip_id);
 
                                     let first_stop_gtfs = trip.unwrap().stop_times[0].stop.clone();
+                                    let last_stop_gtfs = trip.unwrap().stop_times.last().unwrap().stop.clone();
+
+                                    
 
                                     format!("1-{}", horaires[0].arret.no_arret)
                                         == first_stop_gtfs.id
+
+                                        ||
+                                        format!("1-{}", horaires.last().unwrap().arret.no_arret)
+                                        == last_stop_gtfs.id
                                 })
                                 .map(|x| x.to_string())
                                 .collect::<Vec<String>>();
