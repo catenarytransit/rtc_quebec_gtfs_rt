@@ -132,10 +132,11 @@ pub async fn faire_les_donnees_gtfs_rt(
     let mut tries = 0;
 
     while tries < 10 {
-       let parcours_t = obtenir_la_liste_des_itinéraires(client.clone()).await;
+        let parcours_t = obtenir_la_liste_des_itinéraires(client.clone()).await;
+
+        parcours = Some(parcours_t);
 
         if parcours_t.is_ok() {
-            parcours = Some(parcours_t);
             break;
         }
 
@@ -205,7 +206,14 @@ pub async fn faire_les_donnees_gtfs_rt(
             let mut tries = 0;
 
             while tries < 5 {
-                horaires_req = Some(obtenir_liste_horaire_de_autobus(id_voyage.as_str(), id_autobus, client.clone()).await);
+                horaires_req = Some(
+                    obtenir_liste_horaire_de_autobus(
+                        id_voyage.as_str(),
+                        id_autobus,
+                        client.clone(),
+                    )
+                    .await,
+                );
 
                 if horaires_req.as_ref().unwrap().is_ok() {
                     break;
@@ -220,7 +228,6 @@ pub async fn faire_les_donnees_gtfs_rt(
                 Ok(horaires) => Ok((id_voyage.clone(), id_autobus, horaires)),
                 Err(e) => Err(e),
             }
-            
         });
     }
 
@@ -367,7 +374,10 @@ pub async fn faire_les_donnees_gtfs_rt(
                         }
                     }
                 } else {
-                    println!("No stop times in rtc quebec! parcours: {} voyage: {}, no autobus {}", parcours_id, id_voyage, id_autobus);
+                    println!(
+                        "No stop times in rtc quebec! parcours: {} voyage: {}, no autobus {}",
+                        parcours_id, id_voyage, id_autobus
+                    );
                 }
 
                 // make vehicle position
