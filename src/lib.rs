@@ -128,7 +128,22 @@ pub async fn faire_les_donnees_gtfs_rt(
 
     println!("route_id_to_trips: {:?}", end_timer);
 
-    let parcours = obtenir_la_liste_des_itinéraires(client.clone()).await?;
+    let mut parcours: Option<_> = None;
+    let mut tries = 0;
+
+    while tries < 10 {
+       let parcours_t = obtenir_la_liste_des_itinéraires(client.clone()).await;
+
+        if parcours_t.is_ok() {
+            parcours = Some(parcours_t);
+            break;
+        }
+
+        tries += 1;
+    }
+
+    let parcours = parcours.unwrap();
+    let parcours = parcours?;
 
     let mut pos_requests = vec![];
 
@@ -205,7 +220,6 @@ pub async fn faire_les_donnees_gtfs_rt(
                 Ok(horaires) => Ok((id_voyage.clone(), id_autobus, horaires)),
                 Err(e) => Err(e),
             }
-
             
         });
     }
