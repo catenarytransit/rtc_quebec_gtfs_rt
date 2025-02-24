@@ -376,8 +376,10 @@ pub async fn faire_les_donnees_gtfs_rt(
                                 .filter(|trip_id| {
                                     let trip = gtfs.trips.get(*trip_id);
 
-                                    horaires[0].arret.no_arret
-                                        == *trip.unwrap().stop_times[0].stop.code.as_ref().unwrap()
+                                    let first_stop_gtfs = trip.unwrap().stop_times[0].stop.clone();
+
+                                    format!("1-{}", horaires[0].arret.no_arret)
+                                        == first_stop_gtfs.id
                                 })
                                 .map(|x| x.to_string())
                                 .collect::<Vec<String>>();
@@ -594,7 +596,7 @@ mod tests {
             .await
             .unwrap();
 
-        //println!("{:?}", faire_les_donnees_gtfs_rt);
+        println!("{:#?}", faire_les_donnees_gtfs_rt);
 
         assert!(faire_les_donnees_gtfs_rt.vehicles.is_some());
         assert!(faire_les_donnees_gtfs_rt.voyages.is_some());
