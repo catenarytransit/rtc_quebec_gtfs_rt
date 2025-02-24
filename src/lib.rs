@@ -203,6 +203,12 @@ pub async fn faire_les_donnees_gtfs_rt(
         .collect::<Vec<Result<_, _>>>()
         .await;
 
+    for h in horaires_requests_buffered.iter() {
+        if let Err(e) = h {
+            eprintln!("{:?}", e);
+        }
+    }
+
     let horaires = horaires_requests_buffered
         .into_iter()
         .flatten()
@@ -222,6 +228,15 @@ pub async fn faire_les_donnees_gtfs_rt(
     //compute gtfs now
 
     let mut gtfs_vehicles = gtfs_realtime::FeedMessage {
+        header: gtfs_realtime::FeedHeader {
+            gtfs_realtime_version: "2.0".to_string(),
+            incrementality: None,
+            timestamp: Some(Utc::now().timestamp() as u64),
+        },
+        entity: vec![],
+    };
+
+    let mut gtfs_trips = gtfs_realtime::FeedMessage {
         header: gtfs_realtime::FeedHeader {
             gtfs_realtime_version: "2.0".to_string(),
             incrementality: None,
@@ -279,11 +294,44 @@ pub async fn faire_les_donnees_gtfs_rt(
 
                 let mut trip_descriptor: Option<gtfs_realtime::TripDescriptor> = None;
 
+                let mut gtfs_rt_horaire_list: Option<
+                    Vec<gtfs_realtime::trip_update::StopTimeUpdate>,
+                > = None;
+
                 let horaires = horaires_hashtable.get(&(id_voyage.clone(), id_autobus));
 
                 if let Some(horaires) = horaires {
-                    if (horaires.len() >= 1) {
+                    if horaires.len() >= 1 {
                         //println!("{} voyage: {}, no autobus {}", parcours_id, id_voyage, id_autobus);
+
+                        gtfs_rt_horaire_list = Some(
+                            horaires
+                                .iter()
+                                .map(|horaire| {
+                                    let stop_id = format!("1-{}", horaire.arret.no_arret);
+                                    let arrival_time = None;
+                                    let departure_time =
+                                        chrono::DateTime::parse_from_rfc3339(&horaire.horaire)
+                                            .unwrap();
+                                    let departure =
+                                        Some(gtfs_realtime::trip_update::StopTimeEvent {
+                                            delay: None,
+                                            time: Some(departure_time.timestamp()),
+                                            uncertainty: None,
+                                        });
+
+                                    gtfs_realtime::trip_update::StopTimeUpdate {
+                                        stop_sequence: None,
+                                        stop_id: Some(stop_id),
+                                        arrival: arrival_time,
+                                        departure: departure,
+                                        departure_occupancy_status: None,
+                                        schedule_relationship: None,
+                                        stop_time_properties: None,
+                                    }
+                                })
+                                .collect::<Vec<_>>(),
+                        );
 
                         let voyages_gtfs_possibles_en_gtfs_pour_cette_voyage_rtc =
                             voyages_possibles_en_gtfs
@@ -336,6 +384,16 @@ pub async fn faire_les_donnees_gtfs_rt(
                                 modified_trip: None,
                                 start_date: None,
                             });
+                        } else {
+                            trip_descriptor = Some(gtfs_realtime::TripDescriptor {
+                                trip_id: None,
+                                route_id: Some(gtfs_parcours_id.clone()),
+                                direction_id: None,
+                                start_time: None,
+                                schedule_relationship: None,
+                                modified_trip: None,
+                                start_date: None,
+                            });
                         }
                     }
                 }
@@ -365,14 +423,16 @@ pub async fn faire_les_donnees_gtfs_rt(
                 let find_nearest_chrono_time =
                     get_nearest_tz_from_local_result(chrono_time).unwrap();
 
+                let vehicle = Some(gtfs_realtime::VehicleDescriptor {
+                    id: Some(id_autobus.to_string()),
+                    label: Some(id_autobus.to_string()),
+                    license_plate: None,
+                    wheelchair_accessible: None,
+                });
+
                 let v = gtfs_realtime::VehiclePosition {
                     trip: trip_descriptor.clone(),
-                    vehicle: Some(gtfs_realtime::VehicleDescriptor {
-                        id: Some(id_autobus.to_string()),
-                        label: Some(id_autobus.to_string()),
-                        license_plate: None,
-                        wheelchair_accessible: None,
-                    }),
+                    vehicle: vehicle.clone(),
                     position: Some(gtfs_realtime::Position {
                         latitude: position.latitude as f32,
                         longitude: position.longitude as f32,
@@ -390,8 +450,34 @@ pub async fn faire_les_donnees_gtfs_rt(
                     multi_carriage_details: vec![],
                 };
 
+                let id = format!("{}-{}", parcours_id, id_autobus);
+
+                if let Some(trip_descriptor) = trip_descriptor {
+                    if let Some(gtfs_rt_horaire_list) = gtfs_rt_horaire_list {
+                        let t = gtfs_realtime::TripUpdate {
+                            trip: trip_descriptor,
+                            vehicle: vehicle,
+                            stop_time_update: gtfs_rt_horaire_list,
+                            timestamp: None,
+                            delay: None,
+                            trip_properties: None,
+                        };
+
+                        gtfs_trips.entity.push(gtfs_realtime::FeedEntity {
+                            id: id.clone(),
+                            is_deleted: None,
+                            trip_update: Some(t),
+                            vehicle: None,
+                            alert: None,
+                            stop: None,
+                            shape: None,
+                            trip_modifications: None,
+                        });
+                    }
+                }
+
                 gtfs_vehicles.entity.push(gtfs_realtime::FeedEntity {
-                    id: format!("{}-{}", parcours_id, id_autobus),
+                    id: id.clone(),
                     is_deleted: None,
                     trip_update: None,
                     vehicle: Some(v),
@@ -406,7 +492,7 @@ pub async fn faire_les_donnees_gtfs_rt(
 
     Ok(ResponseGtfsRt {
         vehicles: Some(gtfs_vehicles),
-        voyages: None,
+        voyages: Some(gtfs_trips),
         alertes: None,
     })
 }
@@ -467,5 +553,11 @@ mod tests {
             .unwrap();
 
         //println!("{:?}", faire_les_donnees_gtfs_rt);
+
+        assert!(faire_les_donnees_gtfs_rt.vehicles.is_some());
+        assert!(faire_les_donnees_gtfs_rt.voyages.is_some());
+
+        assert!(faire_les_donnees_gtfs_rt.vehicles.unwrap().entity.len() > 0);
+        assert!(faire_les_donnees_gtfs_rt.voyages.unwrap().entity.len() > 0);
     }
 }
