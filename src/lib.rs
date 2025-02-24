@@ -134,9 +134,11 @@ pub async fn faire_les_donnees_gtfs_rt(
     while tries < 10 {
         let parcours_t = obtenir_la_liste_des_itinéraires(client.clone()).await;
 
+        let is_success = parcours_t.is_ok();
+
         parcours = Some(parcours_t);
 
-        if parcours_t.is_ok() {
+        if is_success {
             break;
         }
 
