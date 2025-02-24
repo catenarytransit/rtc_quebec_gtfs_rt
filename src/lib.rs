@@ -97,10 +97,10 @@ pub async fn positions(
 }
 
 #[derive(Clone, Debug)]
-struct ResponseGtfsRt {
-    vehicles: Option<gtfs_realtime::FeedMessage>,
-    voyages: Option<gtfs_realtime::FeedMessage>,
-    alertes: Option<gtfs_realtime::FeedMessage>,
+pub struct ResponseGtfsRt {
+    pub vehicles: Option<gtfs_realtime::FeedMessage>,
+    pub voyages: Option<gtfs_realtime::FeedMessage>,
+    pub alertes: Option<gtfs_realtime::FeedMessage>,
 }
 
 pub async fn faire_les_donnees_gtfs_rt(
@@ -443,7 +443,11 @@ mod tests {
     async fn tour_de_test_complet() {
         let client = Client::new();
 
-        let gtfs = Gtfs::from_url_async("https://cdn.rtcquebec.ca/Site_Internet/DonneesOuvertes/googletransit.zip").await.unwrap();
+        let gtfs = Gtfs::from_url_async(
+            "https://cdn.rtcquebec.ca/Site_Internet/DonneesOuvertes/googletransit.zip",
+        )
+        .await
+        .unwrap();
 
         for (trip_id, trip) in gtfs.trips.iter() {
             if let Some(d) = trip.stop_times[0].departure_time {
