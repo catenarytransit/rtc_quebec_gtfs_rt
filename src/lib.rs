@@ -351,16 +351,18 @@ pub async fn faire_les_donnees_gtfs_rt(
                                         chrono::DateTime::parse_from_rfc3339(&horaire.horaire)
                                             .unwrap();
 
-                                    let time_from_now = departure_time.signed_duration_since(Utc::now());
+                                    let time_from_now =
+                                        departure_time.signed_duration_since(Utc::now());
 
-                                    let departure= match time_from_now.abs().num_seconds() < (20 * 60 * 60)  {
-                                        true => 
-                                        Some(gtfs_realtime::trip_update::StopTimeEvent {
+                                    let departure = match time_from_now.abs().num_seconds()
+                                        < (20 * 60 * 60)
+                                    {
+                                        true => Some(gtfs_realtime::trip_update::StopTimeEvent {
                                             delay: None,
                                             time: Some(departure_time.timestamp()),
                                             uncertainty: None,
                                         }),
-                                        false => None
+                                        false => None,
                                     };
 
                                     gtfs_realtime::trip_update::StopTimeUpdate {
