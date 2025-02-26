@@ -4,8 +4,6 @@ use reqwest::Client;
 use serde::Deserialize;
 use serde::Serialize;
 use std::error::Error;
-use std::pin::pin;
-use std::pin::Pin;
 
 use chrono::{DateTime, Local, LocalResult, Offset, TimeZone, Utc};
 use chrono_tz::Tz;
@@ -242,7 +240,7 @@ pub async fn faire_les_donnees_gtfs_rt(
 
     for h in horaires_requests_buffered.iter() {
         if let Err(e) = h {
-            eprintln!("{:?}", e);
+            eprintln!("horaire fetch failed: {:?}", e);
         }
     }
 
@@ -404,6 +402,16 @@ pub async fn faire_les_donnees_gtfs_rt(
                                 voyages_gtfs_possibles_en_gtfs_pour_cette_voyage_rtc
                                     .contains(trip_id)
                             })
+                            .filter(|(_, start_time)| {
+                                let iso_time = chrono::DateTime::parse_from_rfc3339(
+                                    horaires[0].horaire.as_str(),
+                                )
+                                .unwrap();
+
+                                let diff = start_time.signed_duration_since(iso_time);
+
+                                diff.num_seconds().abs() < 60 * 60 * 3
+                            })
                             .collect::<Vec<_>>();
 
                         let mut diffs = trip_id_to_start_time_for_this_voyage
@@ -425,6 +433,29 @@ pub async fn faire_les_donnees_gtfs_rt(
 
                         if diffs.len() >= 1 {
                             //println!("{:?} pour {}, autobus {}", diffs[0], parcours_id, id_autobus);
+
+                            let starting_time = trip_id_to_start_time
+                                .iter()
+                                .find(|(trip_id, _)| trip_id == diffs[0].0)
+                                .unwrap()
+                                .1;
+
+                            let starting_time =
+                                starting_time.with_timezone(&chrono_tz::America::Montreal);
+
+                            /*if (starting_time.signed_duration_since(chrono::Utc::now())).num_seconds().abs() > 60 * 60 * 2 {
+
+                            println!(
+                                "
+                            trip_id_to_start_time_for_this_voyage: {:?}",
+                                trip_id_to_start_time_for_this_voyage
+                            );
+
+                                    println!(
+                                        "parcours: {} voyage: {}, autobus: {}, starting_time: {}",
+                                        parcours_id, id_voyage, id_autobus, starting_time
+                                    );
+                                }*/
 
                             trip_descriptor = Some(gtfs_realtime::TripDescriptor {
                                 trip_id: Some(diffs[0].0.clone()),
@@ -585,11 +616,10 @@ mod tests {
     async fn tour_de_test_complet() {
         let client = Client::new();
 
-        let gtfs = Gtfs::from_url_async(
-            "https://cdn.rtcquebec.ca/Site_Internet/DonneesOuvertes/googletransit.zip",
-        )
-        .await
-        .unwrap();
+        let gtfs = gtfs_structures::GtfsReader::default()
+            .read_shapes(false) // Won’t read shapes to save time and memory
+            .read_from_path("./googletransit.zip")
+            .unwrap();
 
         for (trip_id, trip) in gtfs.trips.iter() {
             if let Some(d) = trip.stop_times[0].departure_time {
@@ -608,7 +638,7 @@ mod tests {
             .await
             .unwrap();
 
-        println!("{:#?}", faire_les_donnees_gtfs_rt);
+        //println!("{:#?}", faire_les_donnees_gtfs_rt);
 
         assert!(faire_les_donnees_gtfs_rt.vehicles.is_some());
         assert!(faire_les_donnees_gtfs_rt.voyages.is_some());
