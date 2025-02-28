@@ -176,7 +176,7 @@ pub async fn faire_les_donnees_gtfs_rt(
         .buffer_unordered(64)
         .collect::<Vec<Result<_, _>>>()
         .await;
-    println!("time_pos_requests: {:?}", time_pos_requests.elapsed());
+    println!("temps écoulé pour demander des positions: {:?}", time_pos_requests.elapsed());
 
     //parcours id, direction, positions
     let pos_requests_buffered = pos_requests_buffered
@@ -240,7 +240,7 @@ pub async fn faire_les_donnees_gtfs_rt(
 
     for h in horaires_requests_buffered.iter() {
         if let Err(e) = h {
-            eprintln!("horaire fetch failed: {:?}", e);
+            eprintln!("échec de la récupération des données horaires: {:?}", e);
         }
     }
 
@@ -256,7 +256,7 @@ pub async fn faire_les_donnees_gtfs_rt(
     }
 
     println!(
-        "time_horaires_requests: {:?}",
+        "il est temps de récupérer les heures: {:?}",
         time_horaires_requests.elapsed()
     );
 
