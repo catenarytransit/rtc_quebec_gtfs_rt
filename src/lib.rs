@@ -70,7 +70,10 @@ pub async fn obtenir_liste_horaire_de_autobus(
     id_autobus: i64,
     client: Client,
 ) -> Result<Vec<PointTemporelDansVoyage>, Box<dyn Error + Send + Sync>> {
-    let url = format!("https://wsmobile.rtcquebec.ca/api/v3/horaire/ListeHoraire_Autobus?source=appmobileios&idVoyage={}&idAutobus={}", id_voyage, id_autobus);
+    let url = format!(
+        "https://wsmobile.rtcquebec.ca/api/v3/horaire/ListeHoraire_Autobus?source=appmobileios&idVoyage={}&idAutobus={}",
+        id_voyage, id_autobus
+    );
 
     let response = client.get(&url).send().await?;
     let horaires_texte = response.text().await?;
@@ -83,7 +86,9 @@ pub async fn positions(
     direction: &str,
     client: Client,
 ) -> Result<Vec<PositionDeBus>, Box<dyn Error + Send + Sync>> {
-    let url = format!("https://wssiteweb.rtcquebec.ca/api/v2/horaire/ListeAutobus_Parcours/?noParcours={route}&codeDirection={direction}");
+    let url = format!(
+        "https://wssiteweb.rtcquebec.ca/api/v2/horaire/ListeAutobus_Parcours/?noParcours={route}&codeDirection={direction}"
+    );
 
     let response = client.get(&url).send().await?;
 
@@ -176,7 +181,10 @@ pub async fn faire_les_donnees_gtfs_rt(
         .buffer_unordered(64)
         .collect::<Vec<Result<_, _>>>()
         .await;
-    println!("temps écoulé pour demander des positions: {:?}", time_pos_requests.elapsed());
+    println!(
+        "temps écoulé pour demander des positions: {:?}",
+        time_pos_requests.elapsed()
+    );
 
     //parcours id, direction, positions
     let pos_requests_buffered = pos_requests_buffered
@@ -598,11 +606,7 @@ fn get_nearest_tz_from_local_result(
             let diff1 = (offset1_sec).abs();
             let diff2 = (offset2_sec).abs();
 
-            if diff1 <= diff2 {
-                Some(tz1)
-            } else {
-                Some(tz2)
-            }
+            if diff1 <= diff2 { Some(tz1) } else { Some(tz2) }
         }
         LocalResult::None => None,
     }
