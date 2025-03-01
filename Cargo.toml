@@ -2,12 +2,14 @@
 name = "rtc-quebec-gtfs-rt"
 version = "0.1.0"
 edition = "2024"
+license="AGPL-3.0"
+description = "A GTFS-RT client for RTC Ville de Québec"
 
 [dependencies]
 chrono = "0.4.39"
 chrono-tz = "0.10.1"
 futures = "0.3.31"
-gtfs-realtime = "0.1.3"
+gtfs-realtime = "0.1.4"
 gtfs-structures = "0.43.0"
 iso8601 = "0.6.2"
 reqwest = "0.12.12"
