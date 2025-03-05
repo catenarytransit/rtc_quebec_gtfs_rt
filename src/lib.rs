@@ -77,8 +77,21 @@ pub async fn obtenir_liste_horaire_de_autobus(
 
     let response = client.get(&url).send().await?;
     let horaires_texte = response.text().await?;
-    let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
-    Ok(horaires)
+
+    if horaires_texte == "[]" {
+        let url = format!(
+            "https://wsmobile.rtcquebec.ca/api/v3/horaire/ListeHoraire_Autobus?source=appmobileios&idVoyage={}&idAutobus={}\"",
+            id_voyage, id_autobus
+        );
+
+        let response = client.get(&url).send().await?;
+        let horaires_texte = response.text().await?;
+        let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
+        Ok(horaires)
+    } else {
+        let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
+        Ok(horaires)
+    }
 }
 
 pub async fn positions(
