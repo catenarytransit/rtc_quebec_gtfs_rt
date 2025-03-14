@@ -619,9 +619,11 @@ pub async fn faire_les_donnees_gtfs_rt(
                 let find_nearest_chrono_time =
                     get_nearest_tz_from_local_result(chrono_time).unwrap();
 
+                let autobus_nouvelle_id = id_autobus - 10000;
+
                 let vehicle = Some(gtfs_realtime::VehicleDescriptor {
-                    id: Some(id_autobus.to_string()),
-                    label: Some(id_autobus.to_string()),
+                    id: Some(autobus_nouvelle_id.to_string()),
+                    label: Some(autobus_nouvelle_id.to_string()),
                     license_plate: None,
                     wheelchair_accessible: None,
                 });
