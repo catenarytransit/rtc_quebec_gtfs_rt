@@ -91,7 +91,7 @@ pub async fn obtenir_liste_horaire_de_autobus(
     client: Client,
 ) -> Result<Vec<PointTemporelDansVoyage>, Box<dyn Error + Send + Sync>> {
     let url = format!(
-        "https://wsmobile.rtcquebec.ca/api/v3/horaire/ListeHoraire_Autobus?source=appmobileios&idVoyage={}&idAutobus={}",
+        "https://wsmobile.rtcquebec.ca/api/v3/horaire/ListeHoraire_Autobus?source=appmobileios&idVoyage={}&idAutobus={}\"",
         id_voyage, id_autobus
     );
 
@@ -104,22 +104,6 @@ pub async fn obtenir_liste_horaire_de_autobus(
         .send()
         .await?;
     let horaires_texte = response.text().await?;
-
-    if horaires_texte == "[]" {
-        let url = format!(
-            "https://wsmobile.rtcquebec.ca/api/v3/horaire/ListeHoraire_Autobus?source=appmobileios&idVoyage={}&idAutobus={}\"",
-            id_voyage, id_autobus
-        );
-
-        let response = client
-            .get(&url)
-            .header(
-                "User-Agent",
-                "Mozilla/5.0 (Android 4.4; Tablet; rv:41.0) Gecko/41.0 Firefox/41.0",
-            )
-            .send()
-            .await?;
-        let horaires_texte = response.text().await?;
 
         //if still empty, try again
 
@@ -140,10 +124,6 @@ pub async fn obtenir_liste_horaire_de_autobus(
             let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
             Ok(horaires)
         }
-    } else {
-        let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
-        Ok(horaires)
-    }
 }
 
 pub async fn positions(
