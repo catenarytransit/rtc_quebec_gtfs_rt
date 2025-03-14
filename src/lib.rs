@@ -330,7 +330,7 @@ pub async fn faire_les_donnees_gtfs_rt(
 
         let voyages_possibles_en_gtfs = route_id_to_trips.get(gtfs_parcours_id.as_str());
 
-        let mut trip_id_to_start_time: Vec<(String, chrono::DateTime<chrono_tz::Tz>)> = vec![];
+        let mut trip_id_to_start_and_end_time: Vec<(String, chrono::DateTime<chrono_tz::Tz>, chrono::DateTime<chrono_tz::Tz>)> = vec![];
 
         if let Some(voyages_possibles_en_gtfs) = voyages_possibles_en_gtfs {
             for trip_id in voyages_possibles_en_gtfs {
@@ -352,14 +352,19 @@ pub async fn faire_les_donnees_gtfs_rt(
                         let trip_start_time = reference_midnight
                             + std::time::Duration::from_secs(trip_start_time_relative as u64);
 
-                        trip_id_to_start_time.push((trip_id.clone(), trip_start_time));
+                        let trip_end_time = reference_midnight
+                            + std::time::Duration::from_secs(
+                                gtfs_trip.stop_times.last().unwrap().departure_time.unwrap() as u64,
+                            );
+
+                        trip_id_to_start_and_end_time.push((trip_id.clone(), trip_start_time, trip_end_time));
                     }
                 }
             }
 
-            trip_id_to_start_time.sort_by_key(|(_, start_time)| *start_time);
+            trip_id_to_start_and_end_time.sort_by_key(|(_, start_time, _)| *start_time);
 
-            let trip_id_to_start_time = trip_id_to_start_time;
+            let  trip_id_to_start_and_end_time =  trip_id_to_start_and_end_time;
 
             for position in positions.iter().filter(|x| x.id_voyage != "0") {
                 let id_voyage = &position.id_voyage;
@@ -459,15 +464,15 @@ pub async fn faire_les_donnees_gtfs_rt(
                             .filter(|x| x.horaire_minutes != -1)
                             .collect::<Vec<_>>();
 
-                        let trip_id_to_start_time_for_this_voyage = match bien_horaires.is_empty() {
+                        let trip_id_to_start_and_end_time_for_this_voyage = match bien_horaires.is_empty() {
                             true => vec![],
-                            false => trip_id_to_start_time
+                            false => trip_id_to_start_and_end_time
                                 .iter()
-                                .filter(|(trip_id, _)| {
+                                .filter(|(trip_id, _, _)| {
                                     voyages_gtfs_possibles_en_gtfs_pour_cette_voyage_rtc
                                         .contains(trip_id)
                                 })
-                                .filter(|(_, scheduled_start_time)| {
+                                .filter(|(_, scheduled_start_time, _)| {
                                     let iso_time = chrono::DateTime::parse_from_rfc3339(
                                         bien_horaires[0].horaire.as_str(),
                                     )
@@ -480,15 +485,15 @@ pub async fn faire_les_donnees_gtfs_rt(
                                 .collect::<Vec<_>>(),
                         };
 
-                        let mut diffs = trip_id_to_start_time_for_this_voyage
+                        let mut diffs = trip_id_to_start_and_end_time_for_this_voyage
                             .iter()
-                            .map(|(trip_id, start_time)| {
+                            .map(|(trip_id, start_time, end_time)| {
                                 let iso_time = chrono::DateTime::parse_from_rfc3339(
-                                    bien_horaires[0].horaire.as_str(),
+                                    bien_horaires[bien_horaires.len() - 1].horaire.as_str(),
                                 )
                                 .unwrap();
 
-                                let diff = start_time.signed_duration_since(iso_time);
+                                let diff = end_time.signed_duration_since(iso_time);
 
                                 (trip_id, diff)
                             })
@@ -505,9 +510,9 @@ pub async fn faire_les_donnees_gtfs_rt(
                                 );
                             }
 
-                            let starting_time = trip_id_to_start_time
+                            let starting_time = trip_id_to_start_and_end_time
                                 .iter()
-                                .find(|(trip_id, _)| trip_id == diffs[0].0)
+                                .find(|(trip_id, _, _)| trip_id == diffs[0].0)
                                 .unwrap()
                                 .1;
 
@@ -543,7 +548,7 @@ pub async fn faire_les_donnees_gtfs_rt(
                                 parcours_id,
                                 id_voyage,
                                 id_autobus,
-                                trip_id_to_start_time_for_this_voyage
+                                trip_id_to_start_and_end_time_for_this_voyage
                             );
 
                             trip_descriptor = Some(gtfs_realtime::TripDescriptor {
