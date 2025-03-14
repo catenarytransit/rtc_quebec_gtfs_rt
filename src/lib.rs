@@ -99,8 +99,19 @@ pub async fn obtenir_liste_horaire_de_autobus(
 
         let response = client.get(&url).send().await?;
         let horaires_texte = response.text().await?;
-        let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
-        Ok(horaires)
+
+        //if still empty, try again
+
+        if horaires_texte == "[]" {
+            let response = client.get(&url).send().await?;
+            let horaires_texte = response.text().await?;
+
+            let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
+            Ok(horaires)
+         } else {
+            let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
+             Ok(horaires)
+         }
     } else {
         let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
         Ok(horaires)
