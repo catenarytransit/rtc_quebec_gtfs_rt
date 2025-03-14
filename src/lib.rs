@@ -369,6 +369,7 @@ pub async fn faire_les_donnees_gtfs_rt(
                         gtfs_rt_horaire_list = Some(
                             horaires
                                 .iter()
+                                .filter(|horaire| horaire.horaire_minutes != -1)
                                 .map(|horaire| {
                                     let stop_id = format!("1-{}", horaire.arret.no_arret);
                                     let arrival_time = None;
@@ -376,19 +377,11 @@ pub async fn faire_les_donnees_gtfs_rt(
                                         chrono::DateTime::parse_from_rfc3339(&horaire.horaire)
                                             .unwrap();
 
-                                    let time_from_now =
-                                        departure_time.signed_duration_since(Utc::now());
-
-                                    let departure = match time_from_now.abs().num_seconds()
-                                        < (20 * 60 * 60)
-                                    {
-                                        true => Some(gtfs_realtime::trip_update::StopTimeEvent {
-                                            delay: None,
-                                            time: Some(departure_time.timestamp()),
-                                            uncertainty: None,
-                                        }),
-                                        false => None,
-                                    };
+                                    let departure = Some(gtfs_realtime::trip_update::StopTimeEvent {
+                                        delay: None,
+                                        time: Some(departure_time.timestamp()),
+                                        uncertainty: None,
+                                    });
 
                                     gtfs_realtime::trip_update::StopTimeUpdate {
                                         stop_sequence: None,
@@ -403,9 +396,33 @@ pub async fn faire_les_donnees_gtfs_rt(
                                 .collect::<Vec<_>>(),
                         );
 
+                        let current_date_montreal = chrono::Utc::now()
+                            .with_timezone(&chrono_tz::America::Montreal).naive_local();
+
                         let voyages_gtfs_possibles_en_gtfs_pour_cette_voyage_rtc =
                             voyages_possibles_en_gtfs
                                 .iter()
+                                .filter(|trip_id| {
+                                    let split = trip_id.split('_').collect::<Vec<_>>();
+
+                                    if split.len() != 2 {
+                                        return false;
+                                    }
+
+                                    let naive_date = split[1].replace("daily", "");
+
+                                    if naive_date.is_empty() {
+                                        return false;
+                                    }
+
+                                    if let Ok(date) = chrono::NaiveDate::parse_from_str(&naive_date, "%Y%m%d") {
+                                        //check if date is not more than 1 day from now
+                                        let diff = current_date_montreal.date().signed_duration_since(date);
+                                        diff.num_days().abs() < 2
+                                    } else {
+                                        false
+                                    }
+                                })
                                 .filter(|trip_id| {
                                     let trip = gtfs.trips.get(*trip_id);
 
@@ -421,26 +438,30 @@ pub async fn faire_les_donnees_gtfs_rt(
                                 .map(|x| x.to_string())
                                 .collect::<Vec<String>>();
 
-                        println!("{:?} pour {}, no de bus: {}", voyages_gtfs_possibles_en_gtfs_pour_cette_voyage_rtc, parcours_id, position.id_autobus);
+                        //println!("{:?} pour {}, no de bus: {}", voyages_gtfs_possibles_en_gtfs_pour_cette_voyage_rtc, parcours_id, position.id_autobus);
 
-                        let trip_id_to_start_time_for_this_voyage = trip_id_to_start_time
+                        let bien_horaires =  horaires.iter().filter(|x| x.horaire_minutes != -1).collect::<Vec<_>>();
+
+                        let trip_id_to_start_time_for_this_voyage = match bien_horaires.is_empty() {
+                            true => vec![],
+                            false => trip_id_to_start_time
                             .iter()
                             .filter(|(trip_id, _)| {
                                 voyages_gtfs_possibles_en_gtfs_pour_cette_voyage_rtc
                                     .contains(trip_id)
                             })
-                            /* 
-                            .filter(|(_, start_time)| {
+                            .filter(|(_, scheduled_start_time)| {
                                 let iso_time = chrono::DateTime::parse_from_rfc3339(
-                                    horaires[0].horaire.as_str(),
+                                   bien_horaires[0].horaire.as_str(),
                                 )
                                 .unwrap();
 
-                                let diff = start_time.signed_duration_since(iso_time);
+                                let diff = scheduled_start_time.signed_duration_since(iso_time);
 
-                                diff.num_seconds().abs() < 60 * 60 * 3
-                            })*/
-                            .collect::<Vec<_>>();
+                                diff.num_seconds().abs() < 60 * 60 * 4
+                            })
+                            .collect::<Vec<_>>()
+                        };
 
                         let mut diffs = trip_id_to_start_time_for_this_voyage
                             .iter()
@@ -460,7 +481,15 @@ pub async fn faire_les_donnees_gtfs_rt(
                         diffs.sort_by_key(|(_, diff)| diff.num_seconds().abs());
 
                         if diffs.len() >= 1 {
-                            println!("{:?} pour {}, autobus {}", diffs[0], parcours_id, id_autobus);
+                            if diffs[0].1.num_seconds().abs() > 60 * 60 * 2 {
+                                println!(
+                                    "parcours: {} voyage: {}, autobus: {}, heure de départ de l'autobus: {}",
+                                    parcours_id,
+                                    id_voyage,
+                                    id_autobus,
+                                    diffs[0].1
+                                );
+                            }
 
                             let starting_time = trip_id_to_start_time
                                 .iter()
@@ -495,6 +524,8 @@ pub async fn faire_les_donnees_gtfs_rt(
                                 start_date: None,
                             });
                         } else {
+                            eprintln!("trip_id_to_start_time_for_this_voyage est vide!!!! parcours: {} voyage: {}, autobus: {}, {:#?}", parcours_id, id_voyage, id_autobus, trip_id_to_start_time_for_this_voyage);
+
                             trip_descriptor = Some(gtfs_realtime::TripDescriptor {
                                 trip_id: None,
                                 route_id: Some(gtfs_parcours_id.clone()),
@@ -633,7 +664,11 @@ fn get_nearest_tz_from_local_result(
 }
 
 fn calc_reference_midnight(x: chrono::NaiveDate) -> chrono::DateTime<chrono_tz::Tz> {
-    let midday = x.and_hms_opt(12, 0, 0).unwrap().and_local_timezone(chrono_tz::America::Montreal).unwrap();
+    let midday = x
+        .and_hms_opt(12, 0, 0)
+        .unwrap()
+        .and_local_timezone(chrono_tz::America::Montreal)
+        .unwrap();
 
     //subtract 12 hours
     midday - std::time::Duration::from_secs(43200)
@@ -642,15 +677,40 @@ fn calc_reference_midnight(x: chrono::NaiveDate) -> chrono::DateTime<chrono_tz::
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
 
     #[tokio::test]
     async fn tour_de_test_complet() {
         let client = Client::new();
+        //download file https://github.com/catenarytransit/rtc_quebec_proxy_zip/raw/refs/heads/main/rtcquebec_latest.zip
+        //and place it in the root of the project
 
-        let gtfs = gtfs_structures::GtfsReader::default()
+        let url = "https://github.com/catenarytransit/rtc_quebec_proxy_zip/raw/refs/heads/main/rtcquebec_latest.zip";
+
+        let telechargement = std::time::Instant::now();
+        let mut response = reqwest::get(url).await.unwrap();
+
+        println!(
+            "Téléchargement terminé, temps écoulé pour télécharger: {:?}",
+            telechargement.elapsed()
+        );
+
+        let mut file = std::fs::File::create("./rtcquebec_latest.zip").unwrap();
+
+        while let Some(chunk) = response.chunk().await.unwrap() {
+            file.write_all(&chunk).unwrap();
+        }
+
+        let mut gtfs = gtfs_structures::GtfsReader::default()
             .read_shapes(false) // Won’t read shapes to save time and memory
-            .read_from_path("./googletransit.zip")
+            .read_from_path("./rtcquebec_latest.zip")
             .unwrap();
+  
+        gtfs.trips.retain(|_, trip| {
+            !trip.service_id.contains("multint")
+        });
+
+        println!("analyse terminée, dans {:?}", gtfs.read_duration);
 
         for (trip_id, trip) in gtfs.trips.iter() {
             if let Some(d) = trip.stop_times[0].departure_time {
@@ -660,49 +720,78 @@ mod tests {
             }
         }
 
-        /*
-        let parcours = obtenir_la_liste_des_itinéraires(client.clone())
-            .await
-            .unwrap();*/
-
         let faire_les_donnees_gtfs_rt = faire_les_donnees_gtfs_rt(&gtfs, client.clone())
             .await
             .unwrap();
 
-            if let Some(voyages) = &faire_les_donnees_gtfs_rt.voyages  {
-                for voyage in &voyages.entity {
-                    if let Some(trip_update) = &voyage.trip_update {
-                       if let Some(trip_id) = &trip_update.trip.trip_id {
-                           println!("{}", trip_id);
+        let mut error_date_count: usize = 0;
 
-                            //get trip from gtfs file
+        if let Some(voyages) = &faire_les_donnees_gtfs_rt.voyages {
+            for voyage in &voyages.entity {
+                if let Some(trip_update) = &voyage.trip_update {
+                    if let Some(trip_id) = &trip_update.trip.trip_id {
+                        //println!("{}", trip_id);
 
-                            let trip = gtfs.trips.get(trip_id).unwrap();
+                        // récupérer le voyage à partir du fichier GTFS
+                        //get trip from gtfs file
 
-                            // get start date from trip
+                        let trip = gtfs.trips.get(trip_id).unwrap();
 
-                            let service_id = &trip.service_id;
-                            let service_date = gtfs.calendar_dates.get(service_id).unwrap().get(0).unwrap().date;
-                            
-                            let reference_midnight = calc_reference_midnight(service_date);
+                        // obtenir la date de début du voyage
+                        // get start date from trip
 
-                            // get start time from trip
+                        let service_id = &trip.service_id;
+                        let service_date = gtfs
+                            .calendar_dates
+                            .get(service_id)
+                            .unwrap()
+                            .get(0)
+                            .unwrap()
+                            .date;
 
-                            let trip_start_time_relative = trip.stop_times[0].departure_time.unwrap();
-                            let trip_start_time = reference_midnight + std::time::Duration::from_secs(trip_start_time_relative as u64);
+                        let reference_midnight = calc_reference_midnight(service_date);
 
-                            println!("{:?}, {} after midnight, {:?}", trip_start_time,trip_start_time_relative, trip_id);
-                       }
+                        // obtenir l'heure de début du voyage
+                        // get start time from trip
+
+                        let trip_start_time_relative = trip.stop_times[0].departure_time.unwrap();
+                        let trip_start_time = reference_midnight
+                            + std::time::Duration::from_secs(trip_start_time_relative as u64);
+
+                        //retourne une erreur si l'heure de début prévue est supérieure à 12 heures par rapport à l'heure en temps réel
+                        //throw an error if the scheduled start time is more than 12 hours from the realtime times
+
+                        let trip_start_time =
+                            trip_start_time.with_timezone(&chrono_tz::America::Montreal);
+
+                        let time_from_now = trip_start_time.signed_duration_since(Utc::now());
+
+                        if time_from_now.num_seconds().abs() > 60 * 60 * 12 {
+                            eprintln!(
+                                "voyage {}, sur route {},  dans {}s",
+                                trip_id,
+                                trip.route_id,
+                                time_from_now.num_seconds()
+                            );
+                            eprintln!(
+                                "Scheduled start time is more than 12 hours from the realtime times"
+                            );
+
+                            error_date_count += 1;
+                        }
                     }
                 }
             }
+        }
+
+        println!("nombre d'erreurs de date: {}", error_date_count);
 
         //println!("{:#?}", faire_les_donnees_gtfs_rt);
 
         assert!(faire_les_donnees_gtfs_rt.vehicles.is_some());
         assert!(faire_les_donnees_gtfs_rt.voyages.is_some());
 
-     //   assert!(faire_les_donnees_gtfs_rt.vehicles.unwrap().entity.len() > 0);
-      //  assert!(faire_les_donnees_gtfs_rt.voyages.unwrap().entity.len() > 0);
+        //   assert!(faire_les_donnees_gtfs_rt.vehicles.unwrap().entity.len() > 0);
+        //  assert!(faire_les_donnees_gtfs_rt.voyages.unwrap().entity.len() > 0);
     }
 }
