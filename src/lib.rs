@@ -432,13 +432,10 @@ pub async fn faire_les_donnees_gtfs_rt(
                                 .filter(|trip_id| {
                                     let trip = gtfs.trips.get(*trip_id);
 
-                                    let first_stop_gtfs = trip.unwrap().stop_times[0].stop.clone();
                                     let last_stop_gtfs =
                                         trip.unwrap().stop_times.last().unwrap().stop.clone();
 
-                                    format!("1-{}", horaires[0].arret.no_arret)
-                                        == first_stop_gtfs.id
-                                        || format!("1-{}", horaires.last().unwrap().arret.no_arret)
+                                  format!("1-{}", horaires.last().unwrap().arret.no_arret)
                                             == last_stop_gtfs.id
                                 })
                                 .map(|x| x.to_string())
@@ -467,7 +464,7 @@ pub async fn faire_les_donnees_gtfs_rt(
 
                                     let diff = scheduled_start_time.signed_duration_since(iso_time);
 
-                                    diff.num_seconds().abs() < 60 * 60 * 4
+                                    diff.num_seconds().abs() < 60 * 60 * 3
                                 })
                                 .collect::<Vec<_>>(),
                         };
@@ -476,7 +473,7 @@ pub async fn faire_les_donnees_gtfs_rt(
                             .iter()
                             .map(|(trip_id, start_time)| {
                                 let iso_time = chrono::DateTime::parse_from_rfc3339(
-                                    horaires[0].horaire.as_str(),
+                                    bien_horaires[0].horaire.as_str(),
                                 )
                                 .unwrap();
 
@@ -769,15 +766,12 @@ mod tests {
                         let trip_start_time = reference_midnight
                             + std::time::Duration::from_secs(trip_start_time_relative as u64);
 
-                        //retourne une erreur si l'heure de début prévue est supérieure à 12 heures par rapport à l'heure en temps réel
-                        //throw an error if the scheduled start time is more than 12 hours from the realtime times
-
                         let trip_start_time =
                             trip_start_time.with_timezone(&chrono_tz::America::Montreal);
 
                         let time_from_now = trip_start_time.signed_duration_since(Utc::now());
 
-                        if time_from_now.num_seconds().abs() > 60 * 60 * 12 {
+                        if time_from_now.num_seconds() > 60 * 60 * 2 {
                             eprintln!(
                                 "voyage {}, sur route {},  dans {}s",
                                 trip_id,
@@ -785,7 +779,7 @@ mod tests {
                                 time_from_now.num_seconds()
                             );
                             eprintln!(
-                                "Scheduled start time is more than 12 hours from the realtime times"
+                                "L'heure de début prévue est supérieure à 2 heures par rapport aux heures réelles"
                             );
 
                             error_date_count += 1;
