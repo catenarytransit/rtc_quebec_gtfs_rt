@@ -69,7 +69,14 @@ pub async fn obtenir_la_liste_des_itinéraires(
     let parcours_url =
         "https://wsmobile.rtcquebec.ca/api/v2/horaire/ListeParcours?source=appmobileios";
 
-    let response = client.get(parcours_url).send().await?;
+    let response = client
+        .get(parcours_url)
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Android 4.4; Tablet; rv:41.0) Gecko/41.0 Firefox/41.0",
+        )
+        .send()
+        .await?;
 
     let parcours_texte = response.text().await?;
 
@@ -88,7 +95,14 @@ pub async fn obtenir_liste_horaire_de_autobus(
         id_voyage, id_autobus
     );
 
-    let response = client.get(&url).send().await?;
+    let response = client
+        .get(&url)
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Android 4.4; Tablet; rv:41.0) Gecko/41.0 Firefox/41.0",
+        )
+        .send()
+        .await?;
     let horaires_texte = response.text().await?;
 
     if horaires_texte == "[]" {
@@ -97,21 +111,35 @@ pub async fn obtenir_liste_horaire_de_autobus(
             id_voyage, id_autobus
         );
 
-        let response = client.get(&url).send().await?;
+        let response = client
+            .get(&url)
+            .header(
+                "User-Agent",
+                "Mozilla/5.0 (Android 4.4; Tablet; rv:41.0) Gecko/41.0 Firefox/41.0",
+            )
+            .send()
+            .await?;
         let horaires_texte = response.text().await?;
 
         //if still empty, try again
 
         if horaires_texte == "[]" {
-            let response = client.get(&url).send().await?;
+            let response = client
+                .get(&url)
+                .header(
+                    "User-Agent",
+                    "Mozilla/5.0 (Android 4.4; Tablet; rv:41.0) Gecko/41.0 Firefox/41.0",
+                )
+                .send()
+                .await?;
             let horaires_texte = response.text().await?;
 
             let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
             Ok(horaires)
-         } else {
+        } else {
             let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
-             Ok(horaires)
-         }
+            Ok(horaires)
+        }
     } else {
         let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
         Ok(horaires)
@@ -127,7 +155,14 @@ pub async fn positions(
         "https://wssiteweb.rtcquebec.ca/api/v2/horaire/ListeAutobus_Parcours/?noParcours={route}&codeDirection={direction}"
     );
 
-    let response = client.get(&url).send().await?;
+    let response = client
+        .get(&url)
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Android 4.4; Tablet; rv:41.0) Gecko/41.0 Firefox/41.0",
+        )
+        .send()
+        .await?;
 
     let positions_texte = response.text().await?;
 
@@ -330,7 +365,11 @@ pub async fn faire_les_donnees_gtfs_rt(
 
         let voyages_possibles_en_gtfs = route_id_to_trips.get(gtfs_parcours_id.as_str());
 
-        let mut trip_id_to_start_and_end_time: Vec<(String, chrono::DateTime<chrono_tz::Tz>, chrono::DateTime<chrono_tz::Tz>)> = vec![];
+        let mut trip_id_to_start_and_end_time: Vec<(
+            String,
+            chrono::DateTime<chrono_tz::Tz>,
+            chrono::DateTime<chrono_tz::Tz>,
+        )> = vec![];
 
         if let Some(voyages_possibles_en_gtfs) = voyages_possibles_en_gtfs {
             for trip_id in voyages_possibles_en_gtfs {
@@ -357,14 +396,18 @@ pub async fn faire_les_donnees_gtfs_rt(
                                 gtfs_trip.stop_times.last().unwrap().departure_time.unwrap() as u64,
                             );
 
-                        trip_id_to_start_and_end_time.push((trip_id.clone(), trip_start_time, trip_end_time));
+                        trip_id_to_start_and_end_time.push((
+                            trip_id.clone(),
+                            trip_start_time,
+                            trip_end_time,
+                        ));
                     }
                 }
             }
 
             trip_id_to_start_and_end_time.sort_by_key(|(_, start_time, _)| *start_time);
 
-            let  trip_id_to_start_and_end_time =  trip_id_to_start_and_end_time;
+            let trip_id_to_start_and_end_time = trip_id_to_start_and_end_time;
 
             for position in positions.iter().filter(|x| x.id_voyage != "0") {
                 let id_voyage = &position.id_voyage;
@@ -451,8 +494,8 @@ pub async fn faire_les_donnees_gtfs_rt(
                                     let last_stop_gtfs =
                                         trip.unwrap().stop_times.last().unwrap().stop.clone();
 
-                                  format!("1-{}", horaires.last().unwrap().arret.no_arret)
-                                            == last_stop_gtfs.id
+                                    format!("1-{}", horaires.last().unwrap().arret.no_arret)
+                                        == last_stop_gtfs.id
                                 })
                                 .map(|x| x.to_string())
                                 .collect::<Vec<String>>();
@@ -464,7 +507,9 @@ pub async fn faire_les_donnees_gtfs_rt(
                             .filter(|x| x.horaire_minutes != -1)
                             .collect::<Vec<_>>();
 
-                        let trip_id_to_start_and_end_time_for_this_voyage = match bien_horaires.is_empty() {
+                        let trip_id_to_start_and_end_time_for_this_voyage = match bien_horaires
+                            .is_empty()
+                        {
                             true => vec![],
                             false => trip_id_to_start_and_end_time
                                 .iter()
@@ -713,7 +758,7 @@ mod tests {
         let url = "https://github.com/catenarytransit/rtc_quebec_proxy_zip/raw/refs/heads/main/rtcquebec_latest.zip";
 
         let telechargement = std::time::Instant::now();
-        let mut response = reqwest::get(url).await.unwrap();
+        let mut response = client.get(url).send().await.unwrap();
 
         println!(
             "Téléchargement terminé, temps écoulé pour télécharger: {:?}",
