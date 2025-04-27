@@ -1,5 +1,6 @@
 use futures::StreamExt;
 use gtfs_structures::Gtfs;
+use rand::Rng;
 use reqwest::Client;
 use serde::Deserialize;
 use serde::Serialize;
@@ -105,25 +106,25 @@ pub async fn obtenir_liste_horaire_de_autobus(
         .await?;
     let horaires_texte = response.text().await?;
 
-        //if still empty, try again
+    //if still empty, try again
 
-        if horaires_texte == "[]" {
-            let response = client
-                .get(&url)
-                .header(
-                    "User-Agent",
-                    "Mozilla/5.0 (Android 4.4; Tablet; rv:41.0) Gecko/41.0 Firefox/41.0",
-                )
-                .send()
-                .await?;
-            let horaires_texte = response.text().await?;
+    if horaires_texte == "[]" {
+        let response = client
+            .get(&url)
+            .header(
+                "User-Agent",
+                "Mozilla/5.0 (Android 4.4; Tablet; rv:41.0) Gecko/41.0 Firefox/41.0",
+            )
+            .send()
+            .await?;
+        let horaires_texte = response.text().await?;
 
-            let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
-            Ok(horaires)
-        } else {
-            let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
-            Ok(horaires)
-        }
+        let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
+        Ok(horaires)
+    } else {
+        let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
+        Ok(horaires)
+    }
 }
 
 pub async fn positions(
@@ -161,6 +162,7 @@ pub struct ResponseGtfsRt {
 pub async fn faire_les_donnees_gtfs_rt(
     gtfs: &Gtfs,
     client: Client,
+    proxy_urls: Option<&Vec<String>>,
 ) -> Result<ResponseGtfsRt, Box<dyn Error + Send + Sync>> {
     let start_timer = std::time::Instant::now();
 
@@ -212,7 +214,17 @@ pub async fn faire_les_donnees_gtfs_rt(
 
         for direction in [direction_principale, direction_retour] {
             pos_requests.push({
-                let client = client.clone();
+                let client = match proxy_urls {
+                    Some(proxy_urls) => {
+                        let proxy_url = &proxy_urls[rand::rng().random_range(0..proxy_urls.len())];
+                        Client::builder()
+                            .proxy(reqwest::Proxy::http(proxy_url).unwrap())
+                            .timeout(std::time::Duration::from_secs(10))
+                            .build()
+                            .unwrap()
+                    }
+                    None => client.clone(),
+                };
                 let route_id = route_id.clone();
                 let direction = direction.clone();
 
@@ -257,7 +269,17 @@ pub async fn faire_les_donnees_gtfs_rt(
     let mut horaires_requests = vec![];
 
     for (id_voyage, id_autobus) in vec_voyage_et_autobus.iter() {
-        let client = client.clone();
+        let client = match proxy_urls {
+            Some(proxy_urls) => {
+                let proxy_url = &proxy_urls[rand::rng().random_range(0..proxy_urls.len())];
+                Client::builder()
+                    .proxy(reqwest::Proxy::http(proxy_url).unwrap())
+                    .timeout(std::time::Duration::from_secs(10))
+                    .build()
+                    .unwrap()
+            }
+            None => client.clone(),
+        };
         let id_voyage = id_voyage.clone();
         let id_autobus = id_autobus.clone();
 
@@ -771,7 +793,7 @@ mod tests {
             }
         }
 
-        let faire_les_donnees_gtfs_rt = faire_les_donnees_gtfs_rt(&gtfs, client.clone())
+        let faire_les_donnees_gtfs_rt = faire_les_donnees_gtfs_rt(&gtfs, client.clone(), None)
             .await
             .unwrap();
 
