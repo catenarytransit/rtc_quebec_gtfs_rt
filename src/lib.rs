@@ -349,6 +349,7 @@ pub async fn faire_les_donnees_gtfs_rt(
             gtfs_realtime_version: "2.0".to_string(),
             incrementality: None,
             timestamp: Some(Utc::now().timestamp() as u64),
+            feed_version: None,
         },
         entity: vec![],
     };
@@ -358,6 +359,7 @@ pub async fn faire_les_donnees_gtfs_rt(
             gtfs_realtime_version: "2.0".to_string(),
             incrementality: None,
             timestamp: Some(Utc::now().timestamp() as u64),
+            feed_version: None,
         },
         entity: vec![],
     };
@@ -443,6 +445,7 @@ pub async fn faire_les_donnees_gtfs_rt(
                                             delay: None,
                                             time: Some(departure_time.timestamp()),
                                             uncertainty: None,
+                                            scheduled_time: None,
                                         });
 
                                     gtfs_realtime::trip_update::StopTimeUpdate {
