@@ -68,7 +68,7 @@ pub async fn obtenir_la_liste_des_itinéraires(
     client: Client,
 ) -> Result<Vec<Parcour>, Box<dyn Error + Send + Sync>> {
     let parcours_url =
-        "https://wsmobile.rtcquebec.ca/api/v2/horaire/ListeParcours?source=appmobileios";
+        "https://wsmobile.rtcquebec.ca/api/v3/horaire/ListeParcours?source=appmobileios";
 
     let response = client
         .get(parcours_url)
@@ -81,7 +81,14 @@ pub async fn obtenir_la_liste_des_itinéraires(
 
     let parcours_texte = response.text().await?;
 
-    let parcours: Vec<Parcour> = serde_json::from_str(&parcours_texte)?;
+    let parcours: Result<Vec<Parcour>, serde_json::Error> =
+        serde_json::from_str::<Vec<Parcour>>(&parcours_texte);
+
+    if let Err(parcours) = &parcours {
+        eprintln!("{:#?} parcours error from {}", parcours, parcours_texte);
+    }
+
+    let parcours = parcours?;
 
     Ok(parcours)
 }
@@ -93,7 +100,9 @@ pub async fn obtenir_liste_horaire_de_autobus(
 ) -> Result<Vec<PointTemporelDansVoyage>, Box<dyn Error + Send + Sync>> {
     let url = format!(
         "https://wsmobile.rtcquebec.ca/api/v3/horaire/ListeHoraire_Autobus?source=appmobileios&idVoyage={}&idAutobus={}\"",
-        id_voyage, id_autobus
+        //https://wsmobile.rtcquebec.ca/api/v3/horaire/ListeHoraire_Autobus?source=appmobileios&idVoyage=1261&idAutobus=11171
+        id_voyage,
+        id_autobus
     );
 
     let response = client
@@ -104,26 +113,41 @@ pub async fn obtenir_liste_horaire_de_autobus(
         )
         .send()
         .await?;
+
+    let statut = response.status();
+
     let horaires_texte = response.text().await?;
 
-    //if still empty, try again
+    if statut.is_success() {
+        //if still empty, try again
 
-    if horaires_texte == "[]" {
-        let response = client
-            .get(&url)
-            .header(
-                "User-Agent",
-                "Mozilla/5.0 (Android 4.4; Tablet; rv:41.0) Gecko/41.0 Firefox/41.0",
-            )
-            .send()
-            .await?;
-        let horaires_texte = response.text().await?;
+        if horaires_texte == "[]" {
+            let response = client
+                .get(&url)
+                .header(
+                    "User-Agent",
+                    "Mozilla/5.0 (Android 4.4; Tablet; rv:41.0) Gecko/41.0 Firefox/41.0",
+                )
+                .send()
+                .await?;
 
-        let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
-        Ok(horaires)
+            let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
+            Ok(horaires)
+        } else {
+            let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
+            Ok(horaires)
+        }
     } else {
-        let horaires: Vec<PointTemporelDansVoyage> = serde_json::from_str(&horaires_texte)?;
-        Ok(horaires)
+        eprintln!(
+            "{} {} -> {:?} {}",
+            id_voyage, id_autobus, statut, horaires_texte
+        );
+
+        Err(format!(
+            "Échec de la récupération de l'horaire pour le voyage {} autobus {}: statut {}",
+            id_voyage, id_autobus, statut
+        )
+        .into())
     }
 }
 
@@ -133,7 +157,7 @@ pub async fn positions(
     client: Client,
 ) -> Result<Vec<PositionDeBus>, Box<dyn Error + Send + Sync>> {
     let url = format!(
-        "https://wssiteweb.rtcquebec.ca/api/v2/horaire/ListeAutobus_Parcours/?noParcours={route}&codeDirection={direction}"
+        "https://wssiteweb.rtcquebec.ca/api/v3//horaire/ListeAutobus_Parcours/?source=appmobileios&noParcours={route}&codeDirection={direction}"
     );
 
     let response = client
@@ -191,12 +215,17 @@ pub async fn faire_les_donnees_gtfs_rt(
     while tries < 10 {
         let parcours_t = obtenir_la_liste_des_itinéraires(client.clone()).await;
 
+        if let Err(p_err) = &parcours_t {
+            eprintln!("{:#?}", p_err);
+        }
+
         let is_success = parcours_t.is_ok();
 
         parcours = Some(parcours_t);
 
         if is_success {
             break;
+        } else {
         }
 
         tries += 1;
@@ -756,6 +785,26 @@ mod tests {
     use super::*;
     use std::io::Write;
 
+    const HTTP_PROXY_ADDRESSES: &[&str] = &[
+        "4.239.94.226:3128",
+        "149.56.24.51:3128",
+        "16.52.47.20:3128",
+        "51.79.80.224:3535",
+        "167.114.98.246:9595",
+        "15.223.57.73:3128",
+        "35.183.180.110:3128",
+        "158.69.59.135:80",
+        "69.70.244.34:80",
+        "23.132.28.133:3128",
+        "204.83.205.117:3128",
+        "74.48.160.189:3128",
+        "142.93.202.130:3128",
+        "23.227.38.125:80",
+        "23.227.39.52:80",
+        "23.227.38.128:80",
+        "23.227.39.65:80",
+    ];
+
     #[tokio::test]
     async fn tour_de_test_complet() {
         let client = Client::new();
@@ -765,6 +814,7 @@ mod tests {
         let url = "https://github.com/catenarytransit/rtc_quebec_proxy_zip/raw/refs/heads/main/rtcquebec_latest.zip";
 
         let telechargement = std::time::Instant::now();
+
         let mut response = client.get(url).send().await.unwrap();
 
         println!(
@@ -796,9 +846,18 @@ mod tests {
             }
         }
 
-        let faire_les_donnees_gtfs_rt = faire_les_donnees_gtfs_rt(&gtfs, client.clone(), None)
-            .await
-            .unwrap();
+        let faire_les_donnees_gtfs_rt = faire_les_donnees_gtfs_rt(
+            &gtfs,
+            client.clone(),
+            Some(
+                &HTTP_PROXY_ADDRESSES
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>(),
+            ),
+        )
+        .await
+        .unwrap();
 
         let mut error_date_count: usize = 0;
 
@@ -863,6 +922,15 @@ mod tests {
 
         assert!(faire_les_donnees_gtfs_rt.vehicles.is_some());
         assert!(faire_les_donnees_gtfs_rt.voyages.is_some());
+
+        println!(
+            "{} vehicles",
+            faire_les_donnees_gtfs_rt.vehicles.unwrap().entity.len()
+        );
+        println!(
+            "{} voyages",
+            faire_les_donnees_gtfs_rt.voyages.unwrap().entity.len()
+        );
 
         //   assert!(faire_les_donnees_gtfs_rt.vehicles.unwrap().entity.len() > 0);
         //  assert!(faire_les_donnees_gtfs_rt.voyages.unwrap().entity.len() > 0);
