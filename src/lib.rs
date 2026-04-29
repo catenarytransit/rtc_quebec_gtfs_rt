@@ -6,6 +6,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::error::Error;
 
+const API_BASE_URL: &str = "https://api-iv.rtcquebec.ca/api/legacy";
+
 use chrono::{DateTime, Local, LocalResult, Offset, TimeZone, Utc};
 use chrono_tz::Tz;
 
@@ -22,7 +24,7 @@ pub struct Parcour {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PositionDeBus {
     #[serde(rename = "idAutobus")]
-    id_autobus: i64,
+    id_autobus: String,
     latitude: f64,
     longitude: f64,
     #[serde(rename = "idVoyage")]
@@ -68,7 +70,7 @@ pub async fn obtenir_la_liste_des_itinéraires(
     client: Client,
 ) -> Result<Vec<Parcour>, Box<dyn Error + Send + Sync>> {
     let parcours_url =
-        "https://wsmobile.rtcquebec.ca/api/v3/horaire/ListeParcours?source=appmobileios";
+        format!("{API_BASE_URL}/ListeParcours?source=appmobileios");
 
     let response = client
         .get(parcours_url)
@@ -95,11 +97,11 @@ pub async fn obtenir_la_liste_des_itinéraires(
 
 pub async fn obtenir_liste_horaire_de_autobus(
     id_voyage: &str,
-    id_autobus: i64,
+    id_autobus: &str,
     client: Client,
 ) -> Result<Vec<PointTemporelDansVoyage>, Box<dyn Error + Send + Sync>> {
     let url = format!(
-        "https://wsmobile.rtcquebec.ca/api/v3/horaire/ListeHoraire_Autobus?source=appmobileios&idVoyage={}&idAutobus={}\"",
+        "{API_BASE_URL}/ListeHoraire_Autobus?source=appmobileios&idVoyage={}&idAutobus={}",
         //https://wsmobile.rtcquebec.ca/api/v3/horaire/ListeHoraire_Autobus?source=appmobileios&idVoyage=1261&idAutobus=11171
         id_voyage,
         id_autobus
@@ -157,7 +159,7 @@ pub async fn positions(
     client: Client,
 ) -> Result<Vec<PositionDeBus>, Box<dyn Error + Send + Sync>> {
     let url = format!(
-        "https://wssiteweb.rtcquebec.ca/api/v3//horaire/ListeAutobus_Parcours/?source=appmobileios&noParcours={route}&codeDirection={direction}"
+        "{API_BASE_URL}/ListeAutobus_Parcours?source=appmobile&noParcours={route}&codeDirection={direction}"
     );
 
     let response = client
@@ -262,7 +264,10 @@ pub async fn faire_les_donnees_gtfs_rt(
 
                     match pos_req {
                         Ok(positions) => Ok((route_id, direction, positions)),
-                        Err(e) => Err(e),
+                        Err(e) => {
+                            eprintln!("échec de la récupération des positions pour le parcours {} direction {}: {:?}", route_id, direction, e);
+                            Err(e)
+                        },
                     }
                 }
             });
@@ -320,7 +325,7 @@ pub async fn faire_les_donnees_gtfs_rt(
                 horaires_req = Some(
                     obtenir_liste_horaire_de_autobus(
                         id_voyage.as_str(),
-                        id_autobus,
+                        id_autobus.as_str(),
                         client.clone(),
                     )
                     .await,
@@ -444,7 +449,7 @@ pub async fn faire_les_donnees_gtfs_rt(
 
             for position in positions.iter().filter(|x| x.id_voyage != "0") {
                 let id_voyage = &position.id_voyage;
-                let id_autobus = position.id_autobus;
+                let id_autobus = position.id_autobus.as_str();
 
                 let mut trip_descriptor: Option<gtfs_realtime::TripDescriptor> = None;
 
@@ -452,7 +457,7 @@ pub async fn faire_les_donnees_gtfs_rt(
                     Vec<gtfs_realtime::trip_update::StopTimeUpdate>,
                 > = None;
 
-                let horaires = horaires_hashtable.get(&(id_voyage.clone(), id_autobus));
+                let horaires = horaires_hashtable.get(&(id_voyage.clone(), id_autobus.to_string()));
 
                 if let Some(horaires) = horaires {
                     if horaires.len() >= 1 {
@@ -673,7 +678,7 @@ pub async fn faire_les_donnees_gtfs_rt(
                 let find_nearest_chrono_time =
                     get_nearest_tz_from_local_result(chrono_time).unwrap();
 
-                let autobus_nouvelle_id = id_autobus - 10000;
+                let autobus_nouvelle_id = id_autobus.parse::<i64>().unwrap() - 10000;
 
                 let vehicle = Some(gtfs_realtime::VehicleDescriptor {
                     id: Some(autobus_nouvelle_id.to_string()),
@@ -785,26 +790,6 @@ mod tests {
     use super::*;
     use std::io::Write;
 
-    const HTTP_PROXY_ADDRESSES: &[&str] = &[
-        "4.239.94.226:3128",
-        "149.56.24.51:3128",
-        "16.52.47.20:3128",
-        "51.79.80.224:3535",
-        "167.114.98.246:9595",
-        "15.223.57.73:3128",
-        "35.183.180.110:3128",
-        "158.69.59.135:80",
-        "69.70.244.34:80",
-        "23.132.28.133:3128",
-        "204.83.205.117:3128",
-        "74.48.160.189:3128",
-        "142.93.202.130:3128",
-        "23.227.38.125:80",
-        "23.227.39.52:80",
-        "23.227.38.128:80",
-        "23.227.39.65:80",
-    ];
-
     #[tokio::test]
     async fn tour_de_test_complet() {
         let client = Client::new();
@@ -849,12 +834,7 @@ mod tests {
         let faire_les_donnees_gtfs_rt = faire_les_donnees_gtfs_rt(
             &gtfs,
             client.clone(),
-            Some(
-                &HTTP_PROXY_ADDRESSES
-                    .iter()
-                    .map(|x| x.to_string())
-                    .collect::<Vec<String>>(),
-            ),
+            None,
         )
         .await
         .unwrap();
