@@ -10,7 +10,7 @@ chrono = "0.4"
 chrono-tz = "0.10"
 futures = "0.3"
 gtfs-realtime = "0.2.0"
-gtfs-structures = "0.46.1"
+gtfs-structures = "0.47.0"
 iso8601 = "0.6.3"
 rand = "0.9"
 reqwest = {version = "0.13", features = ["query"]}
